@@ -2,26 +2,44 @@
 <html lang="en">
 
 <head>
-    <title>Login</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — DeadlineBuddy</title>
     <link rel="stylesheet" href="../css/style.css">
 </head>
 
 <body>
 
-    <div class="container">
+    <div class="auth-wrapper">
 
-        <h1>Login</h1>
+        <div class="auth-card">
 
-        <input type="email" id="email" placeholder="Email">
+            <h1>DeadlineBuddy 🚀</h1>
 
-        <input type="password" id="password" placeholder="Password">
+            <p class="auth-subtitle">Sign in to your account</p>
 
-        <button onclick="loginUser()">Login</button>
+            <input
+                type="email"
+                id="email"
+                placeholder="Email address"
+            >
 
-        <p>
-            Don't have account?
-            <a href="register.html">Register</a>
-        </p>
+            <input
+                type="password"
+                id="password"
+                placeholder="Password"
+            >
+
+            <button onclick="loginUser()">
+                Login
+            </button>
+
+            <p class="auth-link">
+                Don't have an account?
+                <a href="register.html">Register</a>
+            </p>
+
+        </div>
 
     </div>
 

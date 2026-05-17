@@ -12,20 +12,20 @@ const Task = require("../models/Task");
 
 const User = require("../models/User");
 
-const summarizeText =
-require("./summarizeText");
+const summarizeText = require("./summarizeText");
 
-const smartDeadlineExtractor =
-require("./smartDeadlineExtractor");
+const smartDeadlineExtractor = require("./smartDeadlineExtractor");
 
-const classifyCategory =
-require("./categoryClassifier");
+const classifyCategory = require("./categoryClassifier");
 
-const calculatePriority =
-require("./priorityEngine");
+const calculatePriority = require("./priorityEngine");
 
-const analyzeDocument =
-require("./aiService");
+const analyzeDocument = require("./aiService");
+
+
+// ENSURE UPLOADS DIR EXISTS
+const uploadsDir = path.join(__dirname, "../uploads");
+fs.mkdirSync(uploadsDir, { recursive: true });
 
 
 // IMAP CONFIG
@@ -52,6 +52,40 @@ function openInbox(cb) {
 }
 
 
+// PARSE AI RESULT — extract summary from Gemini JSON response
+function parseAiSummary(aiResult) {
+
+    if (!aiResult) return null;
+
+    try {
+
+        // Strip markdown code fences if present
+        const clean = aiResult
+            .replace(/```json/g, "")
+            .replace(/```/g, "")
+            .trim();
+
+        const parsed = JSON.parse(clean);
+
+        // Return summary field — handle common key names
+        return (
+            parsed.summary ||
+            parsed.Summary ||
+            parsed.short_summary ||
+            parsed["Short summary"] ||
+            null
+        );
+
+    } catch {
+
+        // If not valid JSON, return first 200 chars of raw response
+        return aiResult.slice(0, 200);
+
+    }
+
+}
+
+
 // PROCESS EMAILS
 function processEmails() {
 
@@ -60,17 +94,12 @@ function processEmails() {
         (err, results) => {
 
             if (err) {
-
-                console.log(err);
-
+                console.log("Search error:", err);
                 return;
-
             }
 
             if (!results || results.length === 0) {
-
                 return;
-
             }
 
             const fetch = imap.fetch(
@@ -91,104 +120,73 @@ function processEmails() {
                         stream,
                         async (err, parsed) => {
 
+                            if (err) {
+                                console.log("Parse error:", err);
+                                return;
+                            }
+
                             try {
 
-                                console.log(
-                                    "\n===== NEW EMAIL ====="
-                                );
-
-                                console.log(
-                                    "From:",
-                                    parsed.from.text
-                                );
-
-                                console.log(
-                                    "Subject:",
-                                    parsed.subject
-                                );
-
-                                console.log(
-                                    "Text:",
-                                    parsed.text
-                                );
+                                console.log("\n===== NEW EMAIL =====");
+                                console.log("From:", parsed.from.text);
+                                console.log("Subject:", parsed.subject);
+                                console.log("Text:", parsed.text);
 
 
                                 // FIND USER
-                                const user =
-                                    await User.findOne({
-
-                                        email:
-                                        parsed.from.value[0].address
-
-                                    });
+                                const user = await User.findOne({
+                                    email: parsed.from.value[0].address
+                                });
 
 
                                 // EMAIL DEADLINE
-                                const emailDeadline =
-                                    smartDeadlineExtractor(
-                                        parsed.text || ""
-                                    );
+                                const emailDeadline = smartDeadlineExtractor(
+                                    parsed.text || ""
+                                );
 
-                                console.log(
-                                    "Extracted Deadline:",
+                                console.log("Extracted Deadline:", emailDeadline);
+
+
+                                // EMAIL SUMMARY
+                                const emailSummary = summarizeText(
+                                    parsed.text || ""
+                                );
+
+
+                                // EMAIL CATEGORY
+                                const emailCategory = classifyCategory(
+                                    parsed.text || ""
+                                );
+
+
+                                // EMAIL PRIORITY
+                                const emailPriority = calculatePriority(
                                     emailDeadline
                                 );
 
 
-                                // EMAIL SUMMARY
-                                const emailSummary =
-                                    summarizeText(
-                                        parsed.text || ""
-                                    );
-
-
-                                // EMAIL CATEGORY
-                                const emailCategory =
-                                    classifyCategory(
-                                        parsed.text || ""
-                                    );
-
-
-                                // EMAIL PRIORITY
-                                const emailPriority =
-                                    calculatePriority(
-                                        emailDeadline
-                                    );
-
-
                                 // CREATE EMAIL TASK
-                                if (
-                                    user &&
-                                    emailDeadline
-                                ) {
+                                if (user && emailDeadline) {
 
                                     await Task.create({
 
                                         user: user._id,
 
-                                        title:
-                                        parsed.subject,
+                                        title: parsed.subject,
 
-                                        description:
-                                        parsed.text,
+                                        description: parsed.text,
 
-                                        summary:
-                                        emailSummary,
+                                        summary: emailSummary,
 
-                                        category:
-                                        emailCategory,
+                                        category: emailCategory,
 
-                                        priority:
-                                        emailPriority,
+                                        priority: emailPriority,
 
-                                        deadline:
-                                        emailDeadline
+                                        deadline: emailDeadline
 
                                     });
 
-                                    console.log(
-                                        "Task created from email"
-                                    );
+                                    console.log("Task created from email");
 
                                 }
 
@@ -199,169 +197,105 @@ function processEmails() {
                                     parsed.attachments.length > 0
                                 ) {
 
-                                    console.log(
-                                        "Attachments Found"
-                                    );
+                                    console.log("Attachments Found");
 
-
-                                    for (
-                                        const attachment
-                                        of parsed.attachments
-                                    ) {
+                                    for (const attachment of parsed.attachments) {
 
                                         try {
 
-                                            const filePath =
-                                                path.join(
-
-                                                    __dirname,
-
-                                                    "../uploads",
-
-                                                    attachment.filename
-
-                                                );
-
-
-                                            // SAVE FILE
-                                            fs.writeFileSync(
-
-                                                filePath,
-
-                                                attachment.content
-
-                                            );
-
-
-                                            console.log(
-                                                "Saved:",
+                                            const filePath = path.join(
+                                                uploadsDir,
                                                 attachment.filename
                                             );
 
 
+                                            // SAVE FILE
+                                            fs.writeFileSync(
+                                                filePath,
+                                                attachment.content
+                                            );
+
+                                            console.log("Saved:", attachment.filename);
+
+
                                             // PDF PROCESSING
                                             if (
-
                                                 attachment.contentType ===
                                                 "application/pdf"
-
                                             ) {
 
-                                                console.log(
-                                                    "Reading PDF..."
-                                                );
-
+                                                console.log("Reading PDF...");
 
                                                 const dataBuffer =
-                                                    fs.readFileSync(
-                                                        filePath
-                                                    );
-
+                                                    fs.readFileSync(filePath);
 
                                                 const pdfData =
-                                                    await pdfParse(
-                                                        dataBuffer
-                                                    );
+                                                    await pdfParse(dataBuffer);
+
+                                                console.log("\n===== PDF TEXT =====");
+                                                console.log(pdfData.text);
 
 
-                                                console.log(
-                                                    "\n===== PDF TEXT ====="
-                                                );
-
-                                                console.log(
-                                                    pdfData.text
-                                                );
-
-
-                                                // AI ANALYSIS
+                                                // AI ANALYSIS — now wired into task
                                                 const aiResult =
-                                                    await analyzeDocument(
-                                                        pdfData.text
-                                                    );
+                                                    await analyzeDocument(pdfData.text);
 
+                                                console.log("\n===== AI ANALYSIS =====");
+                                                console.log(aiResult);
 
-                                                console.log(
-                                                    "\n===== AI ANALYSIS ====="
-                                                );
-
-                                                console.log(
-                                                    aiResult
-                                                );
+                                                // Extract summary from AI response
+                                                const aiSummary =
+                                                    parseAiSummary(aiResult);
 
 
                                                 // PDF DEADLINE
                                                 const pdfDeadline =
-                                                    smartDeadlineExtractor(
-                                                        pdfData.text
-                                                    );
+                                                    smartDeadlineExtractor(pdfData.text);
 
-                                                console.log(
-                                                    "PDF Deadline:",
-                                                    pdfDeadline
-                                                );
+                                                console.log("PDF Deadline:", pdfDeadline);
 
 
                                                 // PDF CATEGORY
                                                 const category =
-                                                    classifyCategory(
-                                                        pdfData.text
-                                                    );
+                                                    classifyCategory(pdfData.text);
 
 
                                                 // PDF PRIORITY
                                                 const priority =
-                                                    calculatePriority(
-                                                        pdfDeadline
-                                                    );
+                                                    calculatePriority(pdfDeadline);
 
 
-                                                // PDF SUMMARY
+                                                // Fallback to dumb summary if AI failed
                                                 const pdfSummary =
-                                                    summarizeText(
-                                                        pdfData.text
-                                                    );
+                                                    aiSummary ||
+                                                    summarizeText(pdfData.text);
 
-                                                console.log(
-                                                    "\n===== PDF SUMMARY ====="
-                                                );
-
-                                                console.log(
-                                                    pdfSummary
-                                                );
+                                                console.log("\n===== PDF SUMMARY =====");
+                                                console.log(pdfSummary);
 
 
                                                 // CREATE PDF TASK
-                                                if (
-                                                    user &&
-                                                    pdfDeadline
-                                                ) {
+                                                if (user && pdfDeadline) {
 
                                                     await Task.create({
 
-                                                        user:
-                                                        user._id,
+                                                        user: user._id,
 
-                                                        title:
-                                                        attachment.filename,
+                                                        title: attachment.filename,
 
-                                                        description:
-                                                        pdfData.text,
+                                                        description: pdfData.text,
 
-                                                        summary:
-                                                        pdfSummary,
+                                                        summary: pdfSummary,  // AI summary now used
 
                                                         category,
 
                                                         priority,
 
-                                                        deadline:
-                                                        pdfDeadline
+                                                        deadline: pdfDeadline
 
                                                     });
 
-                                                    console.log(
-                                                        "PDF task created"
-                                                    );
+                                                    console.log("PDF task created");
 
                                                 }
 
@@ -369,10 +303,7 @@ function processEmails() {
 
                                         } catch (pdfError) {
 
-                                            console.log(
-                                                "PDF Error:",
-                                                pdfError
-                                            );
+                                            console.log("PDF Error:", pdfError);
 
                                         }
 
@@ -382,10 +313,7 @@ function processEmails() {
 
                             } catch (error) {
 
-                                console.log(
-                                    "Email Processing Error:",
-                                    error
-                                );
+                                console.log("Email Processing Error:", error);
 
                             }
 
@@ -407,27 +335,24 @@ imap.once("ready", () => {
 
     openInbox((err, box) => {
 
-        if (err) throw err;
+        if (err) {
+            console.log("Inbox open error:", err);
+            return;
+        }
 
         console.log("Inbox opened");
-
 
         // INITIAL CHECK
         processEmails();
 
-
         // REALTIME EMAIL LISTENER
         imap.on("mail", () => {
 
-            console.log(
-                "\nNew mail detected!"
-            );
+            console.log("\nNew mail detected!");
 
             // SMALL DELAY
             setTimeout(() => {
-
                 processEmails();
-
             }, 2000);
 
         });
@@ -439,22 +364,13 @@ imap.once("ready", () => {
 
 // ERRORS
 imap.once("error", (err) => {
-
-    console.log(
-        "IMAP Error:",
-        err
-    );
-
+    console.log("IMAP Error:", err);
 });
 
 
 // END
 imap.once("end", () => {
-
-    console.log(
-        "Connection ended"
-    );
-
+    console.log("Connection ended");
 });
 
 

@@ -4,20 +4,26 @@ const authMiddleware = async (req, res, next) => {
 
     try {
 
-        const token = req.header("Authorization");
+        const authHeader = req.header("Authorization");
 
-        if (!token) {
-
+        if (!authHeader) {
             return res.status(401).json({
-                message: "No token"
+                message: "No token provided"
             });
-
         }
 
-        const decoded = jwt.verify(
-            token,
-            process.env.JWT_SECRET
-        );
+        // Support both "Bearer <token>" and raw token
+        const token = authHeader.startsWith("Bearer ")
+            ? authHeader.split(" ")[1]
+            : authHeader;
+
+        if (!token) {
+            return res.status(401).json({
+                message: "No token provided"
+            });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         req.user = decoded;
 

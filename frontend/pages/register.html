@@ -2,28 +2,50 @@
 <html lang="en">
 
 <head>
-    <title>Register</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register — DeadlineBuddy</title>
     <link rel="stylesheet" href="../css/style.css">
 </head>
 
 <body>
 
-    <div class="container">
+    <div class="auth-wrapper">
 
-        <h1>Register</h1>
+        <div class="auth-card">
 
-        <input type="text" id="name" placeholder="Name">
+            <h1>DeadlineBuddy 🚀</h1>
 
-        <input type="email" id="email" placeholder="Email">
+            <p class="auth-subtitle">Create your account</p>
 
-        <input type="password" id="password" placeholder="Password">
+            <input
+                type="text"
+                id="name"
+                placeholder="Full name"
+            >
 
-        <button onclick="registerUser()">Register</button>
+            <input
+                type="email"
+                id="email"
+                placeholder="Email address"
+            >
 
-        <p>
-            Already have account?
-            <a href="login.html">Login</a>
-        </p>
+            <input
+                type="password"
+                id="password"
+                placeholder="Password"
+            >
+
+            <button onclick="registerUser()">
+                Register
+            </button>
+
+            <p class="auth-link">
+                Already have an account?
+                <a href="login.html">Login</a>
+            </p>
+
+        </div>
 
     </div>
 

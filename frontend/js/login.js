@@ -2,9 +2,13 @@ const API_URL = "http://localhost:5000/api/auth/login";
 
 async function loginUser() {
 
-    const email = document.getElementById("email").value;
-
+    const email    = document.getElementById("email").value;
     const password = document.getElementById("password").value;
+
+    if (!email || !password) {
+        alert("Please fill in all fields");
+        return;
+    }
 
     try {
 
@@ -16,10 +20,7 @@ async function loginUser() {
                 "Content-Type": "application/json"
             },
 
-            body: JSON.stringify({
-                email,
-                password
-            })
+            body: JSON.stringify({ email, password })
 
         });
 
@@ -27,21 +28,22 @@ async function loginUser() {
 
         if (data.token) {
 
+            // Store raw token — dashboard.js adds "Bearer " prefix
             localStorage.setItem("token", data.token);
-
-            alert("Login successful");
 
             window.location.href = "dashboard.html";
 
         } else {
 
-            alert(data.message);
+            alert(data.message || "Login failed");
 
         }
 
     } catch (error) {
 
         console.log(error);
+
+        alert("Something went wrong. Please try again.");
 
     }
 

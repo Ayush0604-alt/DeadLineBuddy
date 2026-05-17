@@ -61,12 +61,21 @@ exports.getTasks = async (req, res) => {
 };
 
 
-// DELETE TASK
+// DELETE TASK — ownership check added
 exports.deleteTask = async (req, res) => {
 
     try {
 
-        await Task.findByIdAndDelete(req.params.id);
+        const task = await Task.findOneAndDelete({
+            _id: req.params.id,
+            user: req.user.id      // ensures user owns this task
+        });
+
+        if (!task) {
+            return res.status(404).json({
+                message: "Task not found or unauthorized"
+            });
+        }
 
         res.status(200).json({
             message: "Task deleted"
