@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        DeadlineBuddy Dashboard
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="../css/style.css"
+    >
+
+</head>
+
+<body>
+
+    <div class="dashboard">
+
+        <!-- TOPBAR -->
+        <div class="topbar">
+
+            <h1>
+                DeadlineBuddy 🚀
+            </h1>
+
+            <button onclick="logout()">
+                Logout
+            </button>
+
+        </div>
+
+
+        <!-- STATS -->
+        <div class="stats-container">
+
+            <div class="stat-card">
+
+                <h2 id="totalTasks">
+                    0
+                </h2>
+
+                <p>
+                    Total Tasks
+                </p>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h2 id="highPriority">
+                    0
+                </h2>
+
+                <p>
+                    High Priority
+                </p>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h2 id="completedTasks">
+                    0
+                </h2>
+
+                <p>
+                    Completed
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- CREATE TASK -->
+        <div class="task-form">
+
+            <h2>Create Task</h2>
+
+            <input
+                type="text"
+                id="title"
+                placeholder="Task title"
+            >
+
+            <input
+                type="text"
+                id="description"
+                placeholder="Description"
+            >
+
+            <input
+                type="text"
+                id="category"
+                placeholder="Category"
+            >
+
+            <input
+                type="date"
+                id="deadline"
+            >
+
+            <button onclick="createTask()">
+                Add Task
+            </button>
+
+        </div>
+
+
+        <!-- SEARCH -->
+        <div class="filter-section">
+
+            <input
+                type="text"
+                id="searchInput"
+                placeholder="Search tasks..."
+                onkeyup="searchTasks()"
+            >
+
+        </div>
+
+
+        <!-- TASK LIST -->
+        <div id="taskList">
+
+        </div>
+
+    </div>
+
+    <script src="../js/dashboard.js"></script>
+
+</body>
+
+</html>

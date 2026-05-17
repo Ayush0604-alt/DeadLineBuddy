@@ -1,0 +1,271 @@
+* {
+
+    margin: 0;
+
+    padding: 0;
+
+    box-sizing: border-box;
+
+}
+
+
+body {
+
+    background: #f5f7fb;
+
+    font-family: Arial, sans-serif;
+
+}
+
+
+.dashboard {
+
+    width: 90%;
+
+    margin: auto;
+
+    padding: 20px;
+
+}
+
+
+.topbar {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    margin-bottom: 20px;
+
+}
+
+
+.topbar button {
+
+    padding: 10px 20px;
+
+    border: none;
+
+    background: black;
+
+    color: white;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+}
+
+
+.stats-container {
+
+    display: flex;
+
+    gap: 20px;
+
+    flex-wrap: wrap;
+
+}
+
+
+.stat-card {
+
+    flex: 1;
+
+    min-width: 200px;
+
+    background: white;
+
+    padding: 20px;
+
+    border-radius: 12px;
+
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
+    text-align: center;
+
+}
+
+
+.stat-card h2 {
+
+    font-size: 32px;
+
+    margin-bottom: 10px;
+
+}
+
+
+.task-form {
+
+    margin-top: 30px;
+
+    background: white;
+
+    padding: 20px;
+
+    border-radius: 12px;
+
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
+}
+
+
+.task-form h2 {
+
+    margin-bottom: 15px;
+
+}
+
+
+.task-form input {
+
+    width: 100%;
+
+    padding: 12px;
+
+    margin-top: 10px;
+
+    border: 1px solid #ddd;
+
+    border-radius: 8px;
+
+}
+
+
+.task-form button {
+
+    margin-top: 15px;
+
+    padding: 12px 20px;
+
+    border: none;
+
+    background: black;
+
+    color: white;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+}
+
+
+.filter-section {
+
+    margin-top: 20px;
+
+}
+
+
+#searchInput {
+
+    width: 100%;
+
+    padding: 12px;
+
+    border: 1px solid #ddd;
+
+    border-radius: 8px;
+
+}
+
+
+.task-card {
+
+    background: white;
+
+    margin-top: 20px;
+
+    padding: 20px;
+
+    border-radius: 12px;
+
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
+}
+
+
+.task-card h2 {
+
+    margin-bottom: 10px;
+
+}
+
+
+.task-card p {
+
+    margin-top: 8px;
+
+}
+
+
+.priority-high {
+
+    border-left: 6px solid red;
+
+}
+
+
+.priority-medium {
+
+    border-left: 6px solid orange;
+
+}
+
+
+.priority-low {
+
+    border-left: 6px solid green;
+
+}
+
+
+.category-badge {
+
+    display: inline-block;
+
+    margin-top: 12px;
+
+    padding: 6px 12px;
+
+    border-radius: 20px;
+
+    background: #e3eafc;
+
+}
+
+
+.summary-box {
+
+    margin-top: 15px;
+
+    background: #f7f7f7;
+
+    padding: 12px;
+
+    border-radius: 8px;
+
+}
+
+
+.task-card button {
+
+    margin-top: 15px;
+
+    padding: 10px 16px;
+
+    border: none;
+
+    background: crimson;
+
+    color: white;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+}
