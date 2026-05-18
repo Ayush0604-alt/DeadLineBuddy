@@ -85,9 +85,19 @@ async function maybeEscalatePriority(task, diff) {
 }
 
 // ── Process a single task ─────────────────────────────────────────
+/**
+ * Drop-in replacement for the processTask() function in
+ * backend/services/reminderService.js
+ *
+ * Key fixes:
+ * 1. Guard against task.user === null before calling User.findById()
+ * 2. Validate that the deadline is actually in the future (handles AI returning past dates)
+ * 3. Cleaner log messages to make CloudWatch debugging easier
+ */
+
 async function processTask(task, now) {
     try {
-        // Validate deadline
+        // ── 1. Validate deadline ──────────────────────────────────
         if (!task.deadline || task.deadline === "Not specified") {
             logger.debug("Skipping — no deadline", { taskId: String(task._id) });
             return;
@@ -95,33 +105,41 @@ async function processTask(task, now) {
 
         const deadline = new Date(task.deadline);
         if (isNaN(deadline.getTime())) {
-            logger.warn("Skipping — invalid deadline", { taskId: String(task._id), deadline: task.deadline });
+            logger.warn("Skipping — unparseable deadline", {
+                taskId:   String(task._id),
+                deadline: task.deadline
+            });
             return;
         }
 
         const diff = deadline - now;
         if (diff <= 0) {
-            logger.debug("Skipping — deadline passed", { taskId: String(task._id) });
+            logger.debug("Skipping — deadline already passed", {
+                taskId:   String(task._id),
+                deadline: task.deadline
+            });
             return;
         }
 
-        // Reminders disabled for this task
+        // ── 2. Reminders disabled on this task ────────────────────
         if (task.remindersDisabled) {
             logger.debug("Skipping — reminders disabled on task", { taskId: String(task._id) });
             return;
         }
 
-        // Snooze guard
+        // ── 3. Snooze guard ───────────────────────────────────────
         if (task.snoozedUntil && now < new Date(task.snoozedUntil)) {
             logger.debug("Skipping — snoozed", {
-                taskId:    String(task._id),
+                taskId:       String(task._id),
                 snoozedUntil: task.snoozedUntil
             });
             return;
         }
 
-        // Resolve user email (two patterns in this codebase)
-        let recipientEmail = task.userEmail || "";
+        // ── 4. Resolve recipient email ────────────────────────────
+        // Lambda tasks: userEmail set, user = null
+        // Dashboard tasks: user set, userEmail may be empty
+        let recipientEmail = (task.userEmail || "").trim();
         let user = null;
 
         if (!recipientEmail && task.user) {
@@ -130,27 +148,36 @@ async function processTask(task, now) {
         }
 
         if (!recipientEmail) {
-            logger.warn("Skipping — no recipient email", { taskId: String(task._id) });
+            logger.warn("Skipping — no recipient email resolved", { taskId: String(task._id) });
             return;
         }
 
-        // Global user unsubscribe check
+        // ── 5. Global unsubscribe check ───────────────────────────
+        // Only look up user if we haven't already AND task.user is not null
         if (!user && task.user) {
             user = await User.findById(task.user).lean();
         }
+        // For Lambda tasks (user = null), skip the global unsubscribe check —
+        // the per-task remindersDisabled flag was already checked above.
         if (user?.remindersDisabled) {
-            logger.debug("Skipping — user has globally unsubscribed", { email: recipientEmail });
+            logger.debug("Skipping — user globally unsubscribed", { email: recipientEmail });
             return;
         }
 
-        // ── Escalation ──
+        // ── 6. Priority escalation ────────────────────────────────
         await maybeEscalatePriority(task, diff);
 
-        // ── Which window are we in? ──
+        // ── 7. Which reminder window are we in? ───────────────────
         const window = getReminderWindow(diff);
-        if (!window) return; // outside all windows
+        if (!window) {
+            logger.debug("Skipping — outside all reminder windows", {
+                taskId:  String(task._id),
+                diffHrs: Math.round(diff / 36e5)
+            });
+            return;
+        }
 
-        // ── Duplicate protection ──
+        // ── 8. Duplicate protection (already sent for this window) ─
         if (task.remindersSent?.[window]) {
             logger.debug("Skipping — already sent for this window", {
                 taskId: String(task._id), window
@@ -158,10 +185,9 @@ async function processTask(task, now) {
             return;
         }
 
-        // ── Digest mode ──
+        // ── 9. Digest mode ────────────────────────────────────────
         const useDigest = task.digestMode || user?.digestModeDefault || false;
         if (useDigest) {
-            // Accumulate for digest; mark as sent so we don't re-add
             if (!digestAccumulator.has(recipientEmail)) {
                 digestAccumulator.set(recipientEmail, new Set());
             }
@@ -170,26 +196,42 @@ async function processTask(task, now) {
             task.remindersSent = { ...(task.remindersSent || {}), [window]: true };
             await task.save();
 
-            logger.info("Task queued for digest", { taskId: String(task._id), email: recipientEmail, window });
+            logger.info("Task queued for digest", {
+                taskId: String(task._id), email: recipientEmail, window
+            });
             return;
         }
 
-        // ── Send individual reminder ──
+        // ── 10. Send individual reminder ──────────────────────────
         const token = await ensureUnsubscribeToken(task);
-        const sent  = await sendReminderEmail(recipientEmail, task, windowLabel(window), token);
+
+        logger.info("Sending reminder", {
+            taskId:    String(task._id),
+            email:     recipientEmail,
+            window,
+            deadline:  task.deadline,
+            diffHours: Math.round(diff / 36e5)
+        });
+
+        const sent = await sendReminderEmail(recipientEmail, task, windowLabel(window), token);
 
         if (sent) {
             task.remindersSent = { ...(task.remindersSent || {}), [window]: true };
             await task.save();
-            logger.info("Reminder sent and recorded", {
+            logger.info("Reminder sent ✓", {
                 taskId: String(task._id),
                 email:  recipientEmail,
                 window
             });
+        } else {
+            logger.error("sendReminderEmail returned false — check EMAIL_USER / EMAIL_PASS", {
+                taskId: String(task._id),
+                email:  recipientEmail
+            });
         }
 
     } catch (err) {
-        logger.error("Error processing task reminder", { taskId: String(task._id), error: err.message });
+        logger.error("processTask error", { taskId: String(task._id), error: err.message });
     }
 }
 

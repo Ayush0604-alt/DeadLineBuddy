@@ -17,7 +17,7 @@ const taskSchema = new mongoose.Schema({
     deadline: { type: String, default: "Not specified" },
     reason:   { type: String, default: "" },
 
-    // ── User association (two patterns coexist in this codebase) ─
+    // ── User association ─────────────────────────────────────────
     user:      { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     userEmail: { type: String, default: "", trim: true, lowercase: true },
 
@@ -44,11 +44,8 @@ const taskSchema = new mongoose.Schema({
     reminderSent: { type: Boolean, default: false },
 
     // ── Snooze ────────────────────────────────────────────────────
-    // When set, the reminder engine skips reminders until after this time.
     snoozedUntil: { type: Date, default: null },
-
-    // Tracks how many times the user has snoozed (for escalation logic)
-    snoozeCount: { type: Number, default: 0 },
+    snoozeCount:  { type: Number, default: 0 },
 
     // ── Unsubscribe ───────────────────────────────────────────────
     unsubscribeToken:  { type: String, default: null, index: true, sparse: true },
@@ -56,11 +53,9 @@ const taskSchema = new mongoose.Schema({
     remindersDisabled: { type: Boolean, default: false },
 
     // ── Daily digest preference ───────────────────────────────────
-    // If true, reminders are batched into one daily email instead of individual ones.
     digestMode: { type: Boolean, default: false },
 
     // ── Escalation ────────────────────────────────────────────────
-    // Tracks whether priority was auto-escalated due to missed windows.
     escalated:        { type: Boolean, default: false },
     originalPriority: { type: String, default: null },
 
@@ -69,19 +64,34 @@ const taskSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-// ── Pre-save: generate dedup hash ────────────────────────────────
-taskSchema.pre("save", function (next) {
-    if (this.isNew || this.isModified("title") || this.isModified("userEmail") || this.isModified("deadline")) {
-        const raw = `${(this.title || "").toLowerCase().trim()}|${(this.userEmail || "").toLowerCase().trim()}|${(this.deadline || "").trim()}`;
+// ── Pre-save: generate dedupHash ──────────────────────────────────
+// Use async form (no `next` param) — required for Mongoose 9.x
+taskSchema.pre("save", async function () {
+    if (
+        this.isNew ||
+        this.isModified("title") ||
+        this.isModified("userEmail") ||
+        this.isModified("deadline")
+    ) {
+        const raw = [
+            (this.title     || "").toLowerCase().trim(),
+            (this.userEmail || "").toLowerCase().trim(),
+            (this.deadline  || "").trim()
+        ].join("|");
+
         this.dedupHash = crypto.createHash("sha256").update(raw).digest("hex");
     }
-    next();
 });
 
 // ── Static: find duplicate ────────────────────────────────────────
 taskSchema.statics.isDuplicate = async function (title, userEmail, deadline) {
-    const raw  = `${(title || "").toLowerCase().trim()}|${(userEmail || "").toLowerCase().trim()}|${(deadline || "").trim()}`;
-    const hash = crypto.createHash("sha256").update(raw).digest("hex");
+    const raw = [
+        (title     || "").toLowerCase().trim(),
+        (userEmail || "").toLowerCase().trim(),
+        (deadline  || "").trim()
+    ].join("|");
+
+    const hash     = crypto.createHash("sha256").update(raw).digest("hex");
     const existing = await this.findOne({ dedupHash: hash });
     return { isDup: !!existing, existing };
 };

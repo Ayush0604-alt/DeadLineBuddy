@@ -120,15 +120,24 @@ function parseAIResponse(raw) {
 }
 
 // ── System prompt ─────────────────────────────────────────────────
-const SYSTEM_PROMPT = `
+const AI_PROMPT = (content) => {
+    const now = new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        dateStyle: "full",
+        timeStyle: "short"
+    });
+
+    return `
 You are an intelligent AI assistant for DeadlineBuddy.
 Analyze the provided content carefully.
 Return ONLY valid raw JSON — no markdown, no code blocks, no explanations.
 
-STRICT JSON FORMAT:
+TODAY'S DATE AND TIME (IST): ${now}
+All deadlines you extract MUST be in the future relative to today's date above.
+
 {
-  "summary": "concise 2-3 sentence summary",
-  "deadline": "ISO datetime in IST e.g. 2026-05-18T16:30:00+05:30 or 'Not specified'",
+  "summary": "2-3 sentence summary",
+  "deadline": "ISO datetime IST e.g. 2026-05-18T16:30:00+05:30 or 'Not specified'",
   "priority": "High | Medium | Low",
   "category": "Internship | Job Opportunity | Assignment | Exam | Event | Meeting | Resume | General",
   "reason": "why this matters",
@@ -138,7 +147,13 @@ STRICT JSON FORMAT:
   "importantLinks": [],
   "isOpportunityRelevant": true
 }
+
+CONTENT:
+${content.substring(0, 12000)}
 `;
+};
+
+
 
 // ── Public API ────────────────────────────────────────────────────
 async function analyzeDocument(text) {
@@ -161,3 +176,4 @@ async function analyzeDocument(text) {
 }
 
 module.exports = { analyzeDocument };
+module.exports = { AI_PROMPT };
