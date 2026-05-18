@@ -1,55 +1,89 @@
-const mongoose =
-require("mongoose");
+/**
+ * Task Model
+ * Extended with: snooze, unsubscribe token, digest mode, dedup hash,
+ * reminder escalation, and per-window sent tracking.
+ */
 
+const mongoose = require("mongoose");
+const crypto   = require("crypto");
 
-const taskSchema =
-new mongoose.Schema({
+const taskSchema = new mongoose.Schema({
 
-    title: String,
+    // ── Core fields ──────────────────────────────────────────────
+    title:    { type: String, required: true, trim: true },
+    summary:  { type: String, default: "" },
+    category: { type: String, default: "General", trim: true },
+    priority: { type: String, enum: ["High", "Medium", "Low"], default: "Low" },
+    deadline: { type: String, default: "Not specified" },
+    reason:   { type: String, default: "" },
 
-    summary: String,
+    // ── User association (two patterns coexist in this codebase) ─
+    user:      { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    userEmail: { type: String, default: "", trim: true, lowercase: true },
 
-    category: String,
+    // ── AI extras ────────────────────────────────────────────────
+    actionItems: { type: [String], default: [] },
+    s3Url:       { type: String, default: "" },
+    sourceType:  { type: String, default: "MANUAL" },
 
-    priority: String,
+    // ── Deduplication hash (SHA-256 of title + userEmail + deadline) ──
+    dedupHash: { type: String, index: true, sparse: true },
 
-    deadline: String,
-
-    reason: String,
-    userEmail: String,
-
-    actionItems: [String],
-
-    s3Url: String,
-
+    // ── Reminder tracking ─────────────────────────────────────────
     remindersSent: {
+        type: Object,
+        default: {
+            sevenDay:   false,
+            oneDay:     false,
+            oneHour:    false,
+            tenMinute:  false
+        }
+    },
 
-    type: Object,
+    // Legacy single-flag used by reminderCron.js
+    reminderSent: { type: Boolean, default: false },
 
-    default: {
+    // ── Snooze ────────────────────────────────────────────────────
+    // When set, the reminder engine skips reminders until after this time.
+    snoozedUntil: { type: Date, default: null },
 
-        sevenDay: false,
-        oneDay: false,
-        oneHour: false,
-        tenMinute: false
+    // Tracks how many times the user has snoozed (for escalation logic)
+    snoozeCount: { type: Number, default: 0 },
 
+    // ── Unsubscribe ───────────────────────────────────────────────
+    unsubscribeToken:  { type: String, default: null, index: true, sparse: true },
+    unsubscribedAt:    { type: Date,   default: null },
+    remindersDisabled: { type: Boolean, default: false },
+
+    // ── Daily digest preference ───────────────────────────────────
+    // If true, reminders are batched into one daily email instead of individual ones.
+    digestMode: { type: Boolean, default: false },
+
+    // ── Escalation ────────────────────────────────────────────────
+    // Tracks whether priority was auto-escalated due to missed windows.
+    escalated:        { type: Boolean, default: false },
+    originalPriority: { type: String, default: null },
+
+    createdAt: { type: Date, default: Date.now }
+
+}, { timestamps: true });
+
+
+// ── Pre-save: generate dedup hash ────────────────────────────────
+taskSchema.pre("save", function (next) {
+    if (this.isNew || this.isModified("title") || this.isModified("userEmail") || this.isModified("deadline")) {
+        const raw = `${(this.title || "").toLowerCase().trim()}|${(this.userEmail || "").toLowerCase().trim()}|${(this.deadline || "").trim()}`;
+        this.dedupHash = crypto.createHash("sha256").update(raw).digest("hex");
     }
-
-},
-
-    createdAt: {
-
-        type: Date,
-
-        default: Date.now
-
-    }
-
+    next();
 });
 
+// ── Static: find duplicate ────────────────────────────────────────
+taskSchema.statics.isDuplicate = async function (title, userEmail, deadline) {
+    const raw  = `${(title || "").toLowerCase().trim()}|${(userEmail || "").toLowerCase().trim()}|${(deadline || "").trim()}`;
+    const hash = crypto.createHash("sha256").update(raw).digest("hex");
+    const existing = await this.findOne({ dedupHash: hash });
+    return { isDup: !!existing, existing };
+};
 
-module.exports =
-mongoose.model(
-    "Task",
-    taskSchema
-);
+module.exports = mongoose.model("Task", taskSchema);

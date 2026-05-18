@@ -1,71 +1,112 @@
-const express = require("express");
-const cors = require("cors");
+/**
+ * DeadlineBuddy — Express Server
+ * Bootstraps: env validation → DB → reminder engine → routes → IMAP
+ */
 
+// ── Env & logging first ───────────────────────────────────────────
 require("dotenv").config();
-require("./services/reminderCron");
 
+const validateEnv = require("./utils/validateEnv");
+validateEnv(); // Exits process immediately if required vars are missing
+
+const { createLogger } = require("./utils/logger");
+const logger = createLogger("Server");
+
+// ── Core dependencies ─────────────────────────────────────────────
+const express        = require("express");
+const cors           = require("cors");
+const connectDB      = require("./config/db");
+const startReminderEngine = require("./services/reminderService");
 const authMiddleware = require("./middleware/authMiddleware");
-const connectDB = require("./config/db");
-const startReminderEngine =
-require("./services/reminderService");
 
-connectDB();
-startReminderEngine();
+// ── Routes ────────────────────────────────────────────────────────
+const authRoutes     = require("./routes/authRoutes");
+const taskRoutes     = require("./routes/taskRoutes");
+const reminderRoutes = require("./routes/reminderRoutes");
+const healthRoutes   = require("./routes/healthRoutes");
+
+// ── App setup ─────────────────────────────────────────────────────
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-
-// ROUTES
-app.use("/api/auth", require("./routes/authRoutes"));
-app.use("/api/tasks", require("./routes/taskRoutes"));
-
-
-app.get("/", (req, res) => {
-    res.send("DeadlineBuddy API Running 🚀");
+// ── Global request logger ─────────────────────────────────────────
+app.use((req, _res, next) => {
+    logger.debug("Incoming request", { method: req.method, path: req.path });
+    next();
 });
 
+// ── Routes ────────────────────────────────────────────────────────
+app.use("/health",           healthRoutes);
+app.use("/api/auth",         authRoutes);
+app.use("/api/tasks",        taskRoutes);
+app.use("/api/reminders",    reminderRoutes);
+
+app.get("/", (_req, res) => {
+    res.json({ message: "DeadlineBuddy API Running 🚀" });
+});
+
+// Protected test route
 app.get("/api/protected", authMiddleware, (req, res) => {
-    res.json({
-        message: "Protected route accessed",
-        user: req.user
+    res.json({ message: "Protected route accessed", user: req.user });
+});
+
+// ── 404 handler ───────────────────────────────────────────────────
+app.use((req, res) => {
+    logger.warn("404 Not Found", { method: req.method, path: req.path });
+    res.status(404).json({ message: "Route not found" });
+});
+
+// ── Global error handler ──────────────────────────────────────────
+app.use((err, req, res, _next) => {
+    logger.error("Unhandled express error", {
+        method: req.method,
+        path:   req.path,
+        error:  err.message,
+        stack:  err.stack
+    });
+    res.status(err.status || 500).json({
+        message: err.message || "Internal server error"
     });
 });
 
-
-// IMAP — start with crash protection
-// If email credentials are missing or wrong, server still runs
-if (
-    process.env.EMAIL_USER &&
-    process.env.EMAIL_PASS &&
-    process.env.EMAIL_HOST &&
-    process.env.EMAIL_PORT
-) {
-
+// ── Boot sequence ─────────────────────────────────────────────────
+async function boot() {
     try {
+        await connectDB();
+        logger.info("Database connected");
 
-        const imap = require("./services/emailReader");
+        startReminderEngine();
 
-        imap.connect();
+        // IMAP — optional, crash-safe
+        if (
+            process.env.EMAIL_USER &&
+            process.env.EMAIL_PASS &&
+            process.env.EMAIL_HOST &&
+            process.env.EMAIL_PORT
+        ) {
+            try {
+                const imap = require("./services/emailReader");
+                imap.connect();
+                logger.info("IMAP connecting…");
+            } catch (err) {
+                logger.warn("IMAP failed to start (server still running)", { error: err.message });
+            }
+        } else {
+            logger.warn("IMAP skipped — EMAIL_HOST / EMAIL_PORT not set");
+        }
 
-        console.log("IMAP connecting...");
+        const PORT = process.env.PORT || 5000;
+        app.listen(PORT, () => {
+            logger.info(`Server running on port ${PORT} ✓`);
+        });
 
     } catch (err) {
-
-        console.log("IMAP failed to start (server still running):", err.message);
-
+        logger.error("Boot failed", { error: err.message });
+        process.exit(1);
     }
-
-} else {
-
-    console.log("⚠️  IMAP skipped — EMAIL env vars not set");
-
 }
 
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+boot();

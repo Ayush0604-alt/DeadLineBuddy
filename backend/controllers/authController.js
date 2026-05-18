@@ -1,97 +1,97 @@
-const User = require("../models/User");
+/**
+ * Auth Controller
+ * Improved with: structured logging, consistent error messages,
+ * unsubscribe token generation on register.
+ */
+
+const User   = require("../models/User");
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const jwt    = require("jsonwebtoken");
+const crypto = require("crypto");
+const { createLogger } = require("../utils/logger");
 
+const logger = createLogger("AuthController");
 
-// REGISTER USER
+// ── REGISTER ──────────────────────────────────────────────────────
 exports.registerUser = async (req, res) => {
-
     try {
-
         const { name, email, password } = req.body;
 
-        // CHECK USER
-        const existingUser = await User.findOne({ email });
-
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
         if (existingUser) {
-            return res.status(400).json({
-                message: "User already exists"
-            });
+            logger.warn("Register: email already exists", { email });
+            return res.status(409).json({ message: "An account with this email already exists" });
         }
 
-        // HASH PASSWORD
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword     = await bcrypt.hash(password, 12);
+        const unsubscribeToken   = crypto.randomBytes(32).toString("hex");
 
-        // CREATE USER
         const user = await User.create({
-            name,
-            email,
-            password: hashedPassword
+            name:             name.trim(),
+            email:            email.toLowerCase().trim(),
+            password:         hashedPassword,
+            unsubscribeToken
         });
 
-        res.status(201).json({
-            message: "User registered successfully",
-            user
+        logger.info("User registered", { userId: String(user._id), email: user.email });
+
+        return res.status(201).json({
+            message: "Account created successfully"
         });
 
-    } catch (error) {
-
-        res.status(500).json({
-            message: error.message
-        });
-
+    } catch (err) {
+        logger.error("registerUser error", { error: err.message });
+        return res.status(500).json({ message: "Internal server error" });
     }
-
 };
 
-
-// LOGIN USER
+// ── LOGIN ─────────────────────────────────────────────────────────
 exports.loginUser = async (req, res) => {
-
     try {
-
         const { email, password } = req.body;
 
-        // CHECK USER
-        const user = await User.findOne({ email });
-
+        const user = await User.findOne({ email: email.toLowerCase() });
         if (!user) {
-            return res.status(400).json({
-                message: "Invalid credentials"
-            });
+            // Use generic message to prevent user enumeration
+            logger.warn("Login: user not found", { email });
+            return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        // CHECK PASSWORD
         const isMatch = await bcrypt.compare(password, user.password);
-
         if (!isMatch) {
-            return res.status(400).json({
-                message: "Invalid credentials"
-            });
+            logger.warn("Login: incorrect password", { userId: String(user._id) });
+            return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        // GENERATE TOKEN
         const token = jwt.sign(
-            {
-                id: user._id
-            },
+            { id: user._id, email: user.email },
             process.env.JWT_SECRET,
-            {
-                expiresIn: "7d"
-            }
+            { expiresIn: "7d" }
         );
 
-        res.status(200).json({
+        logger.info("User logged in", { userId: String(user._id) });
+
+        return res.status(200).json({
             message: "Login successful",
             token
         });
 
-    } catch (error) {
-
-        res.status(500).json({
-            message: error.message
-        });
-
+    } catch (err) {
+        logger.error("loginUser error", { error: err.message });
+        return res.status(500).json({ message: "Internal server error" });
     }
+};
 
+// ── GET PROFILE ───────────────────────────────────────────────────
+exports.getProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select("-password -unsubscribeToken");
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        return res.status(200).json(user);
+    } catch (err) {
+        logger.error("getProfile error", { error: err.message });
+        return res.status(500).json({ message: "Internal server error" });
+    }
 };
