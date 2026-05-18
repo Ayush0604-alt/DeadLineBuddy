@@ -1,29 +1,21 @@
-const {
-    GoogleGenerativeAI
-} = require("@google/generative-ai");
+const { GoogleGenAI } =
+require("@google/genai");
 
 
-const genAI =
-new GoogleGenerativeAI(
+const ai =
+new GoogleGenAI({
+
+    apiKey:
     process.env.GEMINI_API_KEY
-);
+
+});
 
 
-async function analyzeDocument(text) {
+const SYSTEM_PROMPT = `
 
-    try {
+You are DeadlineBuddy AI.
 
-        const model =
-            genAI.getGenerativeModel({
-                model: "gemini-1.5-flash"
-            });
-
-
-        const prompt = `
-
-You are an AI assistant.
-
-Analyze this document and return:
+Analyze uploaded documents and return:
 
 1. Short summary
 2. Main deadline
@@ -31,34 +23,53 @@ Analyze this document and return:
 4. Important action items
 5. Priority level
 
-Document:
-
-${text}
-
-Return response in clean JSON format.
+Return clean JSON.
 
 `;
 
 
-        const result =
-            await model.generateContent(
-                prompt
-            );
+async function analyzeDocument(text) {
+
+    try {
+
+        const prompt = `
+
+${SYSTEM_PROMPT}
+
+Document:
+
+${text}
+
+`;
+
 
         const response =
-            await result.response;
+            await ai.models.generateContent({
 
-        return response.text();
+                model:
+                "gemini-2.5-flash",
+
+                contents:
+                prompt
+
+            });
+
+
+        return response.text;
 
     } catch (error) {
 
-        console.log(error);
+        console.log(
+            "AI Error:",
+            error
+        );
 
         return null;
 
     }
 
 }
+
 
 module.exports =
 analyzeDocument;

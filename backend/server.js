@@ -6,9 +6,11 @@ require("./services/reminderCron");
 
 const authMiddleware = require("./middleware/authMiddleware");
 const connectDB = require("./config/db");
+const startReminderEngine =
+require("./services/reminderService");
 
 connectDB();
-
+startReminderEngine();
 const app = express();
 
 app.use(cors());
