@@ -1,0 +1,19 @@
+{
+  "name": "lambda-worker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1048.0",
+    "@google/genai": "^2.4.0",
+    "mammoth": "^1.12.0",
+    "mongoose": "^9.6.2",
+    "pdf-parse": "^1.1.1"
+  }
+}
