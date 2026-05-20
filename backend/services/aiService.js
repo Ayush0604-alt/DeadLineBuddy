@@ -175,5 +175,4 @@ async function analyzeDocument(text) {
     }
 }
 
-module.exports = { analyzeDocument };
-module.exports = { AI_PROMPT };
+module.exports = { analyzeDocument, AI_PROMPT };
